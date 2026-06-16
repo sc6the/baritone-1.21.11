@@ -32,7 +32,10 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.core.ClientAsset;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.InteractionHand;
@@ -40,11 +43,13 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.phys.Vec3;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -206,41 +211,136 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         if (hash == null || hash.isEmpty()) {
             return false;
         }
-        // a player entity carries its skin texture on its own profile
-        if (entity instanceof Player player && profileHasTexture(player.getGameProfile(), hash)) {
-            return true;
-        }
-        // anything else (e.g. an armor stand) may be wearing a player-head item
-        if (entity instanceof LivingEntity living) {
-            ItemStack head = living.getItemBySlot(EquipmentSlot.HEAD);
-            ResolvableProfile profile = head.get(DataComponents.PROFILE);
-            if (profile != null && profileHasTexture(profile.partialProfile(), hash)) {
+        for (String tex : texturesOf(entity)) {
+            if (tex.contains(hash)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean profileHasTexture(GameProfile profile, String hash) {
+    /**
+     * Gathers every texture identifier we can find for an entity: the player's rendered skin URL,
+     * its game-profile {@code textures} property, and the same for any worn player-head item (all
+     * equipment slots). Returns raw and base64-decoded forms so a hash can be matched in either.
+     */
+    private static Set<String> texturesOf(Entity entity) {
+        Set<String> out = new HashSet<>();
+        // 1) the entity's own rendered skin (this is where a player-head NPC's texture actually lives)
+        if (entity instanceof AbstractClientPlayer acp) {
+            PlayerSkin skin = acp.getSkin();
+            if (skin != null) {
+                collectFromTexture(skin.body(), out);
+                collectFromTexture(skin.cape(), out);
+            }
+        }
+        if (entity instanceof Player player) {
+            collectProfileTextures(player.getGameProfile(), out);
+        }
+        // 2) any worn player-head item in any equipment slot
+        if (entity instanceof LivingEntity living) {
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = living.getItemBySlot(slot);
+                if (stack.isEmpty()) {
+                    continue;
+                }
+                ResolvableProfile profile = stack.get(DataComponents.PROFILE);
+                if (profile != null) {
+                    collectProfileTextures(profile.partialProfile(), out);
+                    PlayerSkin.Patch patch = profile.skinPatch();
+                    if (patch != null) {
+                        patch.body().ifPresent(t -> collectFromTexture(t, out));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void collectFromTexture(ClientAsset.Texture texture, Set<String> out) {
+        if (texture == null) {
+            return;
+        }
+        if (texture instanceof ClientAsset.DownloadedTexture downloaded && downloaded.url() != null) {
+            out.add(downloaded.url());
+        }
+        if (texture.texturePath() != null) {
+            out.add(texture.texturePath().toString());
+        }
+    }
+
+    private static void collectProfileTextures(GameProfile profile, Set<String> out) {
         if (profile == null) {
-            return false;
+            return;
         }
         for (Property property : profile.properties().get("textures")) {
             String value = property.value();
             if (value == null || value.isEmpty()) {
                 continue;
             }
-            String decoded;
+            out.add(value);
             try {
-                decoded = new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
-            } catch (IllegalArgumentException e) {
-                decoded = value; // not base64, match against the raw value just in case
-            }
-            if (decoded.contains(hash) || value.contains(hash)) {
-                return true;
+                out.add(new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8));
+            } catch (IllegalArgumentException ignored) {
+                // not base64; the raw value is already added above
             }
         }
-        return false;
+    }
+
+    /**
+     * Diagnostic dump of nearby entities so the user can see exactly what the heads look like
+     * (type, name, detected texture hashes) and whether the current filter matches them.
+     */
+    public List<String> debugNearby(double range) {
+        List<String> lines = new ArrayList<>();
+        if (ctx.player() == null) {
+            return lines;
+        }
+        double rangeSq = range * range;
+        for (Entity entity : ctx.entities()) {
+            if (entity == ctx.player() || entity.distanceToSqr(ctx.player()) > rangeSq) {
+                continue;
+            }
+            Set<String> textures = texturesOf(entity);
+            Component custom = entity.getCustomName();
+            String type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
+            // only bother reporting things that carry a texture or a custom name
+            if (textures.isEmpty() && custom == null) {
+                continue;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("%s @%.0fm", type, Math.sqrt(entity.distanceToSqr(ctx.player()))));
+            sb.append(" name=").append(entity.getName().getString());
+            if (custom != null) {
+                sb.append(" custom='").append(custom.getString()).append("'");
+            }
+            if (!textures.isEmpty()) {
+                String hashes = textures.stream()
+                        .map(HuntProcess::extractHash)
+                        .filter(h -> h != null)
+                        .distinct()
+                        .collect(Collectors.joining(","));
+                sb.append(" tex=").append(hashes.isEmpty() ? "(present)" : hashes);
+            }
+            sb.append(" match=").append(matches(entity));
+            lines.add(sb.toString());
+            if (lines.size() >= 30) {
+                break;
+            }
+        }
+        return lines;
+    }
+
+    /** Pulls the texture hash out of a skin URL / texture path for readable diagnostics. */
+    private static String extractHash(String s) {
+        int slash = s.lastIndexOf('/');
+        if (slash >= 0 && slash < s.length() - 1) {
+            String tail = s.substring(slash + 1).replace("\"", "").replace("}", "");
+            if (tail.length() >= 32) {
+                return tail;
+            }
+        }
+        return null;
     }
 
     private boolean matchesName(Entity entity) {
@@ -248,14 +348,16 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         if (wanted == null || wanted.isEmpty()) {
             return false;
         }
-        Component name = entity.getCustomName();
-        if (name == null) {
-            name = entity.getName();
+        boolean requireAqua = Baritone.settings().huntNameColorAqua.value;
+        for (Component name : new Component[]{entity.getCustomName(), entity.getDisplayName(), entity.getName()}) {
+            if (name == null || !name.getString().contains(wanted)) {
+                continue;
+            }
+            if (!requireAqua || hasAquaColor(name)) {
+                return true;
+            }
         }
-        if (name == null || !name.getString().contains(wanted)) {
-            return false;
-        }
-        return !Baritone.settings().huntNameColorAqua.value || hasAquaColor(name);
+        return false;
     }
 
     private static boolean hasAquaColor(Component component) {

@@ -38,6 +38,16 @@ public interface IHuntProcess extends IBaritoneProcess {
     boolean isHunting();
 
     /**
+     * Diagnostic listing of nearby entities (type, name, texture hashes, whether they match the
+     * current filter) within {@code range} blocks. Used by {@code hunt scan} to figure out what the
+     * heads actually look like.
+     *
+     * @param range search radius in blocks
+     * @return human-readable lines, one per relevant entity
+     */
+    java.util.List<String> debugNearby(double range);
+
+    /**
      * Stop hunting and release pathing control.
      */
     default void cancel() {

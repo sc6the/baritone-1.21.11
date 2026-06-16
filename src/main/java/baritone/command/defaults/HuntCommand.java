@@ -44,8 +44,18 @@ public class HuntCommand extends Command {
                 logDirect("Hunt stopped");
                 return;
             }
+            if (arg.equals("scan")) {
+                List<String> lines = baritone.getHuntProcess().debugNearby(64.0);
+                if (lines.isEmpty()) {
+                    logDirect("No entities with a name or head texture within 64 blocks.");
+                } else {
+                    logDirect("Nearby entities (type @dist, name, tex hash, match):");
+                    lines.forEach(this::logDirect);
+                }
+                return;
+            }
             if (!arg.equals("start") && !arg.equals("on")) {
-                logDirect("Unknown argument. Usage: hunt [start|stop]");
+                logDirect("Unknown argument. Usage: hunt [start|stop|scan]");
                 return;
             }
         }
@@ -64,7 +74,7 @@ public class HuntCommand extends Command {
     public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
         if (args.hasExactlyOne()) {
             String prefix = args.getString().toLowerCase();
-            return Stream.of("start", "stop").filter(s -> s.startsWith(prefix));
+            return Stream.of("start", "stop", "scan").filter(s -> s.startsWith(prefix));
         }
         return Stream.empty();
     }
@@ -86,7 +96,8 @@ public class HuntCommand extends Command {
                 "Usage:",
                 "> hunt       - start hunting",
                 "> hunt start - start hunting",
-                "> hunt stop  - stop hunting"
+                "> hunt stop  - stop hunting",
+                "> hunt scan  - list nearby entities + their texture hashes (for debugging matches)"
         );
     }
 }
