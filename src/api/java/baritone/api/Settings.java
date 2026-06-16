@@ -1281,6 +1281,18 @@ public final class Settings {
     public final Setting<Integer> huntTargetMaxDistance = new Setting<>(0);
 
     /**
+     * Path to the LabyMod waypoints {@code settings.json} that the ball-finder addon writes its
+     * head coordinates to. Empty means auto-detect
+     * ({@code %APPDATA%/.labymod/labymod-neo/configs/labyswaypoints/settings.json}).
+     */
+    public final Setting<String> huntWaypointsFile = new Setting<>("");
+
+    /**
+     * Only waypoints whose id starts with this prefix are treated as Hunt heads.
+     */
+    public final Setting<String> huntWaypointPrefix = new Setting<>("ballfinder_");
+
+    /**
      * Turn this on if your exploration filter is enormous, you don't want it to check if it's done,
      * and you are just fine with it just hanging on completion
      */

@@ -46,12 +46,8 @@ public class HuntCommand extends Command {
             }
             if (arg.equals("scan")) {
                 List<String> lines = baritone.getHuntProcess().debugNearby(64.0);
-                if (lines.isEmpty()) {
-                    logDirect("No entities with a name or head texture within 64 blocks.");
-                } else {
-                    logDirect("Nearby entities (type @dist, name, tex hash, match):");
-                    lines.forEach(this::logDirect);
-                }
+                logDirect("Hunt waypoints loaded from ball-finder:");
+                lines.forEach(this::logDirect);
                 return;
             }
             if (!arg.equals("start") && !arg.equals("on")) {
@@ -62,11 +58,9 @@ public class HuntCommand extends Command {
         baritone.getHuntProcess().hunt();
         Settings s = BaritoneAPI.getSettings();
         logDirect(String.format(
-                "Hunting targets named \"%s\"%s with texture %s. Auto-attack: %s.",
-                s.huntName.value,
-                s.huntNameColorAqua.value ? " (aqua)" : "",
-                s.huntTextureHash.value,
-                s.huntAutoAttack.value ? "on" : "off"
+                "Hunting ball-finder heads. Auto-attack: %s, reach: %.1f.",
+                s.huntAutoAttack.value ? "on" : "off",
+                s.huntAttackReach.value
         ));
     }
 
@@ -87,17 +81,18 @@ public class HuntCommand extends Command {
     @Override
     public List<String> getLongDesc() {
         return Arrays.asList(
-                "The hunt command tells Baritone to path toward every nearby \"Hunt\" player-head and,",
-                "if huntAutoAttack is enabled, hit them automatically once in reach.",
+                "The hunt command reads the head coordinates that the ball-finder LabyMod addon saves",
+                "to its waypoints file, paths to each head and (if huntAutoAttack is on) hits it +",
+                "right-clicks it once when in reach, then ignores it and moves to the next.",
                 "",
-                "Targets are matched by the head texture (setting huntTextureHash) or by an aqua name",
-                "(settings huntName / huntNameColorAqua). Tune behaviour with the hunt* settings.",
+                "Coordinates come from huntWaypointsFile (auto-detected by default); only waypoints",
+                "whose id starts with huntWaypointPrefix are used. Tune behaviour with the hunt* settings.",
                 "",
                 "Usage:",
                 "> hunt       - start hunting",
                 "> hunt start - start hunting",
                 "> hunt stop  - stop hunting",
-                "> hunt scan  - list nearby entities + their texture hashes (for debugging matches)"
+                "> hunt scan  - show the waypoints file path + loaded head coordinates"
         );
     }
 }
