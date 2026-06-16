@@ -1240,6 +1240,47 @@ public final class Settings {
     public final Setting<Integer> followTargetMaxDistance = new Setting<>(0);
 
     /**
+     * The skin/head texture hash that identifies a "Hunt" target for the {@code hunt} command.
+     * <p>
+     * This is the SHA contained in the texture URL (the part after {@code textures.minecraft.net/texture/}),
+     * matched against the {@code textures} property of a player or of any worn player-head.
+     */
+    public final Setting<String> huntTextureHash = new Setting<>("e9c0d4a53f0027a9f85867029cde060c0cf1cc13289075c00eeb37e49075c68");
+
+    /**
+     * The name a "Hunt" target is expected to display. Used as a fallback identifier alongside
+     * {@link #huntTextureHash} (and only when the name is colored {@link #huntNameColorAqua aqua}, if enabled).
+     */
+    public final Setting<String> huntName = new Setting<>("Hunt");
+
+    /**
+     * When matching a target by its {@link #huntName name}, also require the name to be colored aqua.
+     */
+    public final Setting<Boolean> huntNameColorAqua = new Setting<>(true);
+
+    /**
+     * Whether the {@code hunt} command should automatically attack targets once they're within
+     * {@link #huntAttackReach reach}.
+     */
+    public final Setting<Boolean> huntAutoAttack = new Setting<>(true);
+
+    /**
+     * How close (in blocks, eye to target) a Hunt target must be before {@link #huntAutoAttack auto-attack} swings.
+     */
+    public final Setting<Double> huntAttackReach = new Setting<>(3.0D);
+
+    /**
+     * The radius (for the GoalNear) of how close to a Hunt target Baritone tries to get.
+     * 0 means walk straight into it.
+     */
+    public final Setting<Integer> huntFollowRadius = new Setting<>(2);
+
+    /**
+     * The maximum distance at which Hunt targets are considered. 0 disables the limit.
+     */
+    public final Setting<Integer> huntTargetMaxDistance = new Setting<>(0);
+
+    /**
      * Turn this on if your exploration filter is enormous, you don't want it to check if it's done,
      * and you are just fine with it just hanging on completion
      */

@@ -53,6 +53,12 @@ public interface IBaritone {
     IFollowProcess getFollowProcess();
 
     /**
+     * @return The {@link IHuntProcess} instance
+     * @see IHuntProcess
+     */
+    IHuntProcess getHuntProcess();
+
+    /**
      * @return The {@link IMineProcess} instance
      * @see IMineProcess
      */
