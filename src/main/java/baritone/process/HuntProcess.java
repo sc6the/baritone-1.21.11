@@ -47,7 +47,10 @@ import net.minecraft.world.phys.Vec3;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -66,6 +69,8 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
 
     private boolean hunting;
     private List<Entity> cache;
+    /** UUIDs of heads we've already hit, so we ignore them and move on to the next one. */
+    private final Set<UUID> alreadyHit = new HashSet<>();
 
     public HuntProcess(Baritone baritone) {
         super(baritone);
@@ -95,7 +100,7 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         scanWorld();
 
         if (Baritone.settings().huntAutoAttack.value) {
-            attackClosest();
+            hitClosest();
         }
 
         int radius = Baritone.settings().huntFollowRadius.value;
@@ -110,12 +115,13 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         return new GoalNear(target.blockPosition(), radius);
     }
 
-    private void attackClosest() {
+    private void hitClosest() {
         Player player = ctx.player();
         if (player == null) {
             return;
         }
         double reach = Baritone.settings().huntAttackReach.value;
+        // cache already excludes heads we've hit; just grab the nearest remaining one
         Entity target = cache.stream()
                 .min(Comparator.comparingDouble(e -> e.distanceToSqr(player)))
                 .orElse(null);
@@ -128,7 +134,7 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         if (eyes.distanceTo(aim) > reach) {
             return;
         }
-        // face the target so the swing (and the server-side hit) lands
+        // face the target so the swing (and the server-side hit/interact) lands
         Rotation rotation = RotationUtils.calcRotationFromVec3d(eyes, aim, ctx.playerRotations());
         baritone.getLookBehavior().updateTarget(rotation, false);
 
@@ -139,8 +145,13 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         if (mc.gameMode == null) {
             return;
         }
+        // left-click hit
         mc.gameMode.attack(player, target);
         player.swing(InteractionHand.MAIN_HAND);
+        // right-click the head once, just to make sure
+        mc.gameMode.interact(player, target, InteractionHand.MAIN_HAND);
+        // remember it so we ignore it from now on and move on to the next head
+        alreadyHit.add(target.getUUID());
     }
 
     private static Vec3 closestPointOnBox(Entity entity, Vec3 from) {
@@ -172,6 +183,9 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         }
         if (!(entity instanceof LivingEntity)) {
             return false;
+        }
+        if (alreadyHit.contains(entity.getUUID())) {
+            return false; // we've already hit this head, ignore it
         }
         int maxDist = Baritone.settings().huntTargetMaxDistance.value;
         if (maxDist != 0 && entity.distanceToSqr(ctx.player()) > (double) maxDist * maxDist) {
@@ -211,7 +225,7 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
         if (profile == null) {
             return false;
         }
-        for (Property property : profile.getProperties().get("textures")) {
+        for (Property property : profile.properties().get("textures")) {
             String value = property.value();
             if (value == null || value.isEmpty()) {
                 continue;
@@ -265,6 +279,7 @@ public final class HuntProcess extends BaritoneProcessHelper implements IHuntPro
     public void onLostControl() {
         hunting = false;
         cache = null;
+        alreadyHit.clear();
     }
 
     @Override

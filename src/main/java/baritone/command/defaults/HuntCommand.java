@@ -61,9 +61,10 @@ public class HuntCommand extends Command {
     }
 
     @Override
-    public Stream<String> tabComplete(String label, IArgConsumer args) {
+    public Stream<String> tabComplete(String label, IArgConsumer args) throws CommandException {
         if (args.hasExactlyOne()) {
-            return Stream.of("start", "stop").filter(s -> s.startsWith(args.getString().toLowerCase()));
+            String prefix = args.getString().toLowerCase();
+            return Stream.of("start", "stop").filter(s -> s.startsWith(prefix));
         }
         return Stream.empty();
     }
